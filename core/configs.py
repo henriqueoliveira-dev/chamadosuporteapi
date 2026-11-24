@@ -1,23 +1,27 @@
 from typing import ClassVar
 
-from pydantic_settings import BaseSettings
-from sqlalchemy.ext.declarative import declarative_base
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.orm import declarative_base
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     API_V1_STR: str = "/api/v1"
-    DB_URL: str = "mysql+asyncmy://dev:123456@localhost:3306/chamados_suporte"
+    DB_URL: str = Field(min_length=1)
+    DB_ECHO: bool = False
     DBBaseModel: ClassVar[type] = declarative_base()
 
-    JWT_SECRET: str = "g0tk6H-2TL6Ydy5WFQ6eGePc6jKJ9F-2NczfMevInMk"
-    """
-    import secrets
-
-    token = secrets.token_urlsafe(32)
-    """
-
+    # A secret must be supplied by the environment; a committed default would
+    # let anyone forge access tokens. Keep at least 256 bits of entropy.
+    JWT_SECRET: str = Field(min_length=32)
     ALGORITHM: str = "HS256"
-    # 60 minutes * 24 hours * 7 days => 1  semana
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30 * 24 * 7
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30 * 24 * 7, gt=0)
 
-settings: Settings = Settings()        
+
+settings: Settings = Settings()

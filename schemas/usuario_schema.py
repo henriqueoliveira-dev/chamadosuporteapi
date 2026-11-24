@@ -1,16 +1,18 @@
 from typing import List, Optional
-from pydantic import BaseModel, EmailStr
+
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 from schemas.artigo_schema import ArtigoSchema
 
+
 class UsuarioSchema(BaseModel):
-    id: Optional[int]
+    id: Optional[int] = None
     nome: str
     email: EmailStr
     eh_admin: bool = False
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class UsuarioSchemaBase(BaseModel):
     senha: str
@@ -24,8 +26,7 @@ class UsuarioSchemaRead(BaseModel):
     eh_adm: Optional[bool] = None
     ativo: Optional[bool] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UsuarioSchemaCreate(UsuarioSchemaBase):
@@ -33,15 +34,18 @@ class UsuarioSchemaCreate(UsuarioSchemaBase):
     sobrenome: str
     email: EmailStr
 
+    # Public sign-up must never silently accept role/privilege fields.
+    model_config = ConfigDict(extra="forbid")
+
 
 class UsuarioSchemaArtigos(UsuarioSchemaRead):
     artigos: Optional[List[ArtigoSchema]] = None
 
-class UsuarioSchemaUpdate(BaseModel):
-    nome: Optional[str]
-    sobrenome: Optional[str]
-    email: Optional[EmailStr]
-    senha: Optional[str]
-    eh_admin: Optional[bool]
 
-    
+class UsuarioSchemaUpdate(BaseModel):
+    nome: Optional[str] = None
+    sobrenome: Optional[str] = None
+    email: Optional[EmailStr] = None
+    senha: Optional[str] = None
+    # Kept as the existing update API field; mapped to ORM's eh_adm column.
+    eh_admin: Optional[bool] = None

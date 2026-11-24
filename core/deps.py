@@ -1,54 +1,59 @@
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
 from fastapi import Depends, HTTPException, status
-from jose import jwt, JWTError
-
+from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from pydantic import BaseModel
 
+from core.auth import oauth2_schema
 from core.configs import settings
 from core.database import async_session
-from core.auth import oauth2_schema
 from models.usuario_model import UsuarioModel
 
-class TokenData(BaseModel):
-    username: Optional[str] = None
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    session = async_session()
-    
-    try:
-        yield session
-    finally:
-        await session.close() 
-
-
-get_db = get_session
-
-
-async def get_current_user(token: str = Depends(oauth2_schema), db: AsyncSession = Depends(get_db)) -> UsuarioModel:
-    credentials_exception = HTTPException(
+def _credentials_exception() -> HTTPException:
+    return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Não foi possível validar as credenciais.",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    session = async_session()
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.ALGORITHM], options={"verify_aud": False})
-        username: str = payload.get("sub")
-        if username is None:
+        yield session
+    finally:
+        await session.close()
+
+
+get_db = get_session
+
+
+async def get_current_user(
+    token: str = Depends(oauth2_schema),
+    db: AsyncSession = Depends(get_session),
+) -> UsuarioModel:
+    credentials_exception = _credentials_exception()
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.ALGORITHM],
+        )
+        subject = payload.get("sub")
+        if payload.get("type") != "access_token" or subject is None:
             raise credentials_exception
-        token_data = TokenData(username=username)
-    except JWTError:
+        user_id = int(subject)
+    except (JWTError, TypeError, ValueError):
         raise credentials_exception
 
-    async with db as session:
-        query = select(UsuarioModel).filter(UsuarioModel.id == token_data.username)
-        result = await session.execute(query)
-        usuario: UsuarioModel = result.scalars().unique().one_or_none()
+    query = select(UsuarioModel).filter(UsuarioModel.id == user_id)
+    result = await db.execute(query)
+    usuario = result.scalars().unique().one_or_none()
 
-        if usuario is None:
-            raise credentials_exception
+    if usuario is None or not usuario.ativo:
+        raise credentials_exception
 
-        return usuario
+    return usuario
